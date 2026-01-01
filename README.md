@@ -332,7 +332,7 @@ let usuarios = [
   }
 ];
 
-let usuarioAtual = "Ian Sotero";
+let usuarioAtual = "ADMIN";
 
 let venda = [];
 let vendasTotais = 0;
@@ -645,7 +645,7 @@ function renderCalendario(){
   const primeiro=new Date(year,month,1);
   const ultimo=new Date(year,month+1,0);
 
-  const dias=["D","S","T","Q","Q","S","S"];
+  const dias=["S","T","Q","Q","S","S","D"];
   dias.forEach(d=>{
     let div=document.createElement("div");
     div.className="dayHeader";
