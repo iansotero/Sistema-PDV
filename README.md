@@ -645,7 +645,7 @@ function renderCalendario(){
   const primeiro=new Date(year,month,1);
   const ultimo=new Date(year,month+1,0);
 
-  const dias=["S","T","Q","Q","S","S","D"];
+  const dias=["D","S","T","Q","Q","S","S"];
   dias.forEach(d=>{
     let div=document.createElement("div");
     div.className="dayHeader";
