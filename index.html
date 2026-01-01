@@ -112,6 +112,55 @@ button.action{
   margin-top:10px;
   display:none;
 }
+
+/* área de gráficos financeiro */
+#chartsRow{
+  margin-top:15px;
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+}
+.chartBox{
+  background:#152a45;
+  border-radius:12px;
+  padding:10px;
+  flex:1;
+  min-width:320px;
+}
+
+/* tabela clientes alinhada */
+#clienteTable th, #clienteTable td{
+  text-align:left;
+}
+
+/* --- GALERIA DE USUÁRIOS --- */
+#usuarioList{
+  margin-top:15px;
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+  list-style:none;
+  padding:0;
+}
+
+.userCard{
+  background:#1b2f4f;
+  padding:10px;
+  border-radius:12px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.userCard img{
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  object-fit:cover;
+  border:2px solid #2d5bb1;
+}
+
+.userInfo b{display:block;}
 </style>
 </head>
 
@@ -198,7 +247,15 @@ button.action{
   <br><br>
   Filtrar: <input id="filtroCliente" placeholder="Nome ou CPF" oninput="renderClientes()">
 
-  <ul id="clienteList"></ul>
+  <!-- NOVA TABELA ALINHADA -->
+  <table id="clienteTable">
+    <thead>
+      <tr>
+        <th>Nome</th><th>Telefone</th><th>CPF</th><th>Ações</th>
+      </tr>
+    </thead>
+    <tbody id="clienteList"></tbody>
+  </table>
 
   <p>Total clientes: <b id="relClientes">0</b></p>
 </section>
@@ -225,6 +282,15 @@ button.action{
       <b>Faturamento:</b> <span id="selectedRevenue">R$ 0,00</span>
     </div>
   </div>
+
+  <div id="chartsRow">
+    <div class="chartBox">
+      <canvas id="monthlyChart"></canvas>
+    </div>
+    <div class="chartBox">
+      <canvas id="userChart"></canvas>
+    </div>
+  </div>
 </section>
 
 <!-- ================= USUÁRIOS ================= -->
@@ -235,6 +301,7 @@ button.action{
 
   <div id="userForm">
     Nome: <input id="uNome"><br><br>
+    Email: <input id="uEmail"><br><br>
     Senha: <input id="uSenha" type="password"><br><br>
     Cargo: <input id="uCargo"><br><br>
     <button class="action" onclick="addUsuario()">Salvar</button>
@@ -243,6 +310,8 @@ button.action{
   <ul id="usuarioList"></ul>
 </section>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 <script>
 let produtos = [
   {id:1,codigo:"101",nome:"Café 500g",preco:15,estoque:20},
@@ -250,12 +319,27 @@ let produtos = [
 ];
 
 let clientes = [];
-let usuarios = [];
+
+/* USUÁRIO FIXO */
+let usuarios = [
+  {
+    nome:"Ian Sotero",
+    email:"ian.sotero@sistema.com",
+    senha:"12345",
+    cargo:"Administrador",
+    foto:"https://i.pravatar.cc/150?img=3",
+    fixo:true
+  }
+];
+
 let usuarioAtual = "ADMIN";
 
 let venda = [];
 let vendasTotais = 0;
 let historicoVendas = [];
+
+let monthlyChartInstance = null;
+let userChartInstance = null;
 
 function salvarDados(){
   localStorage.setItem("produtos", JSON.stringify(produtos));
@@ -270,11 +354,28 @@ function carregarDados(){
   let u = JSON.parse(localStorage.getItem("usuarios"));
   let v = JSON.parse(localStorage.getItem("vendasTotais"));
   let h = JSON.parse(localStorage.getItem("historicoVendas"));
+
   if(p) produtos = p;
   if(c) clientes = c;
-  if(u) usuarios = u;
   if(v) vendasTotais = v;
   if(h) historicoVendas = h;
+
+  // garante que o usuário fixo sempre exista
+  if(!u){
+    salvarDados();
+  } else {
+    usuarios = u;
+    if(!usuarios.some(x=>x.email==="ian.sotero@sistema.com")){
+      usuarios.unshift({
+        nome:"Ian Sotero",
+        email:"ian.sotero@sistema.com",
+        senha:"12345",
+        cargo:"Administrador",
+        foto:"https://i.pravatar.cc/150?img=3",
+        fixo:true
+      });
+    }
+  }
 }
 
 function show(id){
@@ -389,7 +490,9 @@ function finalizarVenda(){
   let total=venda.reduce((s,i)=>s+i.qtd*i.produto.preco,0);
   vendasTotais+=total;
   let data=new Date().toISOString().slice(0,10);
-  historicoVendas.push({data,total});
+
+  historicoVendas.push({data,total,usuario:usuarioAtual});
+
   venda=[];
   alert("Venda concluída!");
   salvarDados(); render();
@@ -433,8 +536,8 @@ function excluirCliente(i){
   }
 }
 function renderClientes(){
-  let ul=clienteList;
-  ul.innerHTML="";
+  let tbody=clienteList;
+  tbody.innerHTML="";
   let filtro=(document.getElementById("filtroCliente")?.value||"").toUpperCase();
   clientes
     .filter(c =>
@@ -442,17 +545,21 @@ function renderClientes(){
       c.cpf.replace(/\D/g,"").includes(filtro.replace(/\D/g,""))
     )
     .forEach((c,i)=>{
-      let li=document.createElement("li");
-      li.innerHTML=
-        `${c.nome} | ${c.telefone} | ${c.cpf}
-         <span style="margin-left:10px;cursor:pointer" onclick="editarCliente(${i})">✏️</span>
-         <span style="margin-left:6px;cursor:pointer" onclick="excluirCliente(${i})">🗑️</span>`;
-      ul.appendChild(li);
+      let tr=document.createElement("tr");
+      tr.innerHTML=
+        `<td>${c.nome}</td>
+         <td>${c.telefone}</td>
+         <td>${c.cpf}</td>
+         <td>
+           <span style="cursor:pointer" onclick="editarCliente(${i})">✏️</span>
+           <span style="margin-left:6px;cursor:pointer" onclick="excluirCliente(${i})">🗑️</span>
+         </td>`;
+      tbody.appendChild(tr);
     });
   relClientes.textContent=clientes.length;
 }
 
-/* FINANCEIRO — agora calcula por mês selecionado */
+/* FINANCEIRO */
 function renderFinanceiro(){
   let m = Number(calendarMonth?.value ?? new Date().getMonth()) + 1;
   let y = Number(calendarYear?.value ?? new Date().getFullYear());
@@ -463,6 +570,8 @@ function renderFinanceiro(){
 
   finTotal.textContent="R$ "+totalMes.toFixed(2);
   relVendas.textContent=vendasMes.length;
+
+  updateCharts();
 }
 
 /* USUÁRIOS */
@@ -473,8 +582,10 @@ function toggleUserForm(){
 function addUsuario(){
   usuarios.push({
     nome:uNome.value,
+    email:uEmail.value,
     senha:uSenha.value,
-    cargo:uCargo.value
+    cargo:uCargo.value,
+    foto:"https://i.pravatar.cc/150?u="+Date.now()
   });
   salvarDados();
   renderUsuarios();
@@ -484,7 +595,14 @@ function renderUsuarios(){
   usuarioList.innerHTML="";
   usuarios.forEach(u=>{
     let li=document.createElement("li");
-    li.textContent = `${u.nome} — ${u.cargo}`;
+    li.className="userCard";
+    li.innerHTML =
+      `<img src="${u.foto||'https://i.pravatar.cc/150'}">
+       <div class="userInfo">
+         <b>${u.nome}</b>
+         <span>${u.email||''}</span>
+         <small>${u.cargo||''}</small>
+       </div>`;
     usuarioList.appendChild(li);
   });
 }
@@ -512,8 +630,8 @@ function initCalendario(){
 
   monthSelect.value=now.getMonth();
   yearSelect.value=anoAtual;
-  monthSelect.onchange=()=>{renderCalendario(); renderFinanceiro();}
-  yearSelect.onchange=()=>{renderCalendario(); renderFinanceiro();}
+  monthSelect.onchange=()=>{renderCalendario(); renderFinanceiro();};
+  yearSelect.onchange=()=>{renderCalendario(); renderFinanceiro();};
   renderCalendario();
 }
 
@@ -558,6 +676,55 @@ function renderCalendario(){
 
     grid.appendChild(div);
   }
+}
+
+/* GRAFICOS */
+function updateCharts(){
+  const year = Number(calendarYear?.value ?? new Date().getFullYear());
+
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  let valores = new Array(12).fill(0);
+
+  historicoVendas.forEach(v=>{
+    if(v.data.startsWith(year+"-")){
+      const m = Number(v.data.slice(5,7)) - 1;
+      valores[m] += v.total;
+    }
+  });
+
+  if(monthlyChartInstance) monthlyChartInstance.destroy();
+  monthlyChartInstance = new Chart(document.getElementById("monthlyChart"),{
+    type:"bar",
+    data:{labels:meses,datasets:[{label:"Faturamento por mês (R$)",data:valores}]}
+  });
+
+  // HORIZONTAL — gráfico por usuário
+  let porUsuario = {};
+  historicoVendas.forEach(v=>{
+    let u = v.usuario || "DESCONHECIDO";
+    if(!porUsuario[u]) porUsuario[u]={total:0, qtd:0};
+    porUsuario[u].total += v.total;
+    porUsuario[u].qtd += 1;
+  });
+
+  let users = Object.keys(porUsuario);
+  let valoresUser = users.map(u=>porUsuario[u].total);
+  let qtdUser = users.map(u=>porUsuario[u].qtd);
+
+  if(userChartInstance) userChartInstance.destroy();
+  userChartInstance = new Chart(document.getElementById("userChart"),{
+    type:"bar",
+    data:{
+      labels:users,
+      datasets:[
+        {label:"Número de vendas", data:qtdUser},
+        {label:"Valor vendido (R$)", data:valoresUser}
+      ]
+    },
+    options:{
+      indexAxis:'y'
+    }
+  });
 }
 
 function render(){
