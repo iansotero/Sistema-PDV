@@ -332,7 +332,7 @@ let usuarios = [
   }
 ];
 
-let usuarioAtual = "ADMIN";
+let usuarioAtual = "Ian Sotero";
 
 let venda = [];
 let vendasTotais = 0;
